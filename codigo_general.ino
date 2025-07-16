@@ -20,15 +20,27 @@ float magnitud_fuerzag= 0;
 
 //-------------------------Variables RPM---------------------------------
 
+volatile unsigned long currentmicros = 0;
+volatile unsigned long previousmicros = 0;
+volatile unsigned long periodo = 1;
+volatile unsigned long rpm = 0;
+int dientes = 36;
 
-int rpm = 0;                                //Variable donde se guardarán las rpm
-unsigned long previousmicros = 0;           //Variable donde guardaremos el tiempo anterior para contabilizar la frecuencia
-unsigned long currentmicros = 0;            //Variable donde guardaremos el tiempo actual para contabilizar la frecuencia
-unsigned long periodo = 30000000;           //Variable donde guardaremos la duracion entre interrupciones. Iniciamos en 30000000 para que el primer calculo de rpm no sea infinito
+//int rpm = 0;                                //Variable donde se guardarán las rpm
+//unsigned long previousmicros = 0;           //Variable donde guardaremos el tiempo anterior para contabilizar la frecuencia
+//unsigned long currentmicros = 0;            //Variable donde guardaremos el tiempo actual para contabilizar la frecuencia
+//unsigned long periodo = 30000000;           //Variable donde guardaremos la duracion entre interrupciones. Iniciamos en 30000000 para que el primer calculo de rpm no sea infinito
 float aceleracion_x = 0;
 //-------------------------Variables TPS---------------------------------
 
 const int pinPot = 0;
+
+
+//-------------------------Variables temperatura motor---------------------------------
+
+int pin_temp_motor = PA7;
+
+float temperatura_motor = 0;
 
 
 
@@ -39,9 +51,11 @@ void setup() {
 
 Serial.begin(115200);
 
+
+
 pinMode(PA12, INPUT);  // Configura PA12 como entrada
 attachInterrupt(digitalPinToInterrupt(PA12), RPM, FALLING);  // Interrupción por flanco descendente
-
+/*
 
 delay(1000);
   //------------------------Inicializacion de la IMU--------------------------------
@@ -65,25 +79,34 @@ delay(1000);
 
   
   delay(1000);
-
+*/
  
 
 }
 
 void loop() {
-
+ 
 
     unsigned long tiempoActual = millis();
+    
 
-
-   
+  
 
     if((tiempoActual - tiempoMuestra >= periodoMuestreo))
     {     
  //-----------------------Llamar funciones-------------------------
 
-      rpm = 30000000/periodo;                  
-     
+      if (periodo > 0) {
+      rpm = (60* 1000000)/(periodo * dientes);
+      } 
+      Serial.print("RPM: ");
+      Serial.println(rpm);    
+      
+      temperatura_motor = medir_temp_motor(pin_temp_motor , 100 , 50000);    
+      Serial.print("temperatura motor: ");
+      Serial.println(temperatura_motor);     
+ /*...............0   
+ 
  //-----------------------Codigo imu-------------------------     
       //inicializaciones para poder llamar a la funcion
       sensors_event_t a, g, temp;
@@ -99,11 +122,11 @@ void loop() {
       
  //-----------------------Enviar datos-------------------------
       matlab_send(aceleracion_x, 1,1);
-  
-    
+
+    /*/
       tiempoMuestra = tiempoActual;
     }
-
+  
 }
 
 
@@ -149,14 +172,18 @@ float medir_temp_motor(int pin_motor, float Rmin , float Rmax){
 
     // Leer el ADC (0 a 4095) y convertir a voltaje
     uint16_t adc_val = analogRead(pin_motor);
+    
     float vt = (adc_val * Vcc) / 4095.0;
 
+     Serial.print("tension leida: ");
+     Serial.println(vt);    
+    
     // Calcular resistencia del termistor
     float Rt = (vt * R_fija) / (Vcc - vt);
     //map(potValor, potMin, potMax, 0, 180);
-    float temp_motor = map(vt , Rmin , Rmax, 0 , 100);
+    float temp_motor = map(Rt , Rmin , Rmax, 0 , 100);
 
-    return Rt; // resistencia en ohms
+    return temp_motor; // resistencia en ohms
 }
 
 
