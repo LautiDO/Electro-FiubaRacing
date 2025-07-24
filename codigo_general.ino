@@ -4,7 +4,15 @@
 #include <Adafruit_Sensor.h>
 #include <Wire.h>
 #include <math.h>
+#include <SPI.h>    // libreria interfaz SPI
+#include <SD.h>     // libreria para tarjetas SD
 
+//-------------------------Variables guardado memoria---------------------------------
+
+
+#define SSpin 38    // Slave Select en pin digital 10
+bool test;
+File archivo;
 
 
 unsigned long tiempoMuestra=0;
@@ -55,6 +63,25 @@ Serial.begin(115200);
 
 pinMode(PA12, INPUT);  // Configura PA12 como entrada
 attachInterrupt(digitalPinToInterrupt(PA12), RPM, FALLING);  // Interrupción por flanco descendente
+
+
+Serial.println("Inicializando tarjeta ...");  // texto en ventana de monitor
+test = SD.begin(SSpin);
+
+
+
+  Serial.println((int)test);
+  if (!test) {      // inicializacion de tarjeta SD
+    Serial.println("fallo en inicializacion !");// si falla se muestra texto correspondiente y
+    return;         // se sale del setup() para finalizar el programa
+  }
+
+
+  Serial.println("inicializacion correcta");  // texto de inicializacion correcta
+  archivo = SD.open("prueba.txt", FILE_WRITE);  // apertura para lectura/escritura de archivo prueba.txt
+
+
+
 /*
 
 delay(1000);
@@ -104,7 +131,10 @@ void loop() {
       
       temperatura_motor = medir_temp_motor(pin_temp_motor , 100 , 50000);    
       Serial.print("temperatura motor: ");
-      Serial.println(temperatura_motor);     
+      Serial.println(temperatura_motor);   
+
+
+      guardar_datos(temperatura_motor , rpm);
  /*...............0   
  
  //-----------------------Codigo imu-------------------------     
@@ -195,3 +225,24 @@ void RPM()                                  //Funcion a realizar en cada interru
   periodo = currentmicros - previousmicros; //El periodo de la señal serán los us actuales menos los us anteriores
   previousmicros = currentmicros;           //Igualamos us actuales a us anteriores para calcular el proximo periodo
 } 
+
+
+//-------------------------funcion guardar datos---------------------------------
+
+void guardar_datos(float dato1 , float dato2){
+  File archivo = SD.open("prueba.txt", FILE_WRITE);  // apertura para lectura/escritura de archivo prueba.txt
+
+  if (archivo) {
+    archivo.println("temperatura");
+    archivo.println(dato1);  // escritura de una linea de texto en archivo
+    archivo.println("RPM");
+    archivo.println(dato1);  // escritura de una linea de texto en archivo
+    
+    Serial.println("Escribiendo en archivo prueba.txt..."); // texto en monitor serie
+    archivo.close();        // cierre del archivo
+    Serial.println("escritura correcta"); // texto de escritura correcta en monitor serie
+  } else {
+    Serial.println("error en apertura de prueba.txt");  // texto de falla en apertura de archivo
+  }
+
+}
