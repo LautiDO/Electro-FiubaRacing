@@ -41,8 +41,8 @@ int dientes = 36;
 float aceleracion_x = 0;
 //-------------------------Variables TPS---------------------------------
 
-const int pinPot = 0;
-
+const int pinPot = PA6;
+float TPS = 0;
 
 //-------------------------Variables temperatura motor---------------------------------
 
@@ -50,6 +50,25 @@ int pin_temp_motor = PA7;
 
 float temperatura_motor = 0;
 
+
+
+//-------------------------Variables temperatura del aire---------------------------------
+
+
+int pin_aire =PB0;
+float temperatura_aire = 0;
+
+//-------------------------Variables IMU---------------------------------
+
+int pin_tps = PA9; //fijarse cual era el asignado
+int min_tps=0;
+int max_tps =1023;//esto hay que cambiarlo una vez puesto en el motor
+
+
+//-------------------------Variables lambda---------------------------------
+float AFR = 0;
+
+int pin_lambda = PB1; 
 
 
 
@@ -65,6 +84,8 @@ pinMode(PA12, INPUT);  // Configura PA12 como entrada
 attachInterrupt(digitalPinToInterrupt(PA12), RPM, FALLING);  // Interrupción por flanco descendente
 
 
+
+/*
 Serial.println("Inicializando tarjeta ...");  // texto en ventana de monitor
 test = SD.begin(SSpin);
 
@@ -81,8 +102,10 @@ test = SD.begin(SSpin);
   archivo = SD.open("prueba.txt", FILE_WRITE);  // apertura para lectura/escritura de archivo prueba.txt
 
 
+*/
 
-/*
+
+
 
 delay(1000);
   //------------------------Inicializacion de la IMU--------------------------------
@@ -106,7 +129,7 @@ delay(1000);
 
   
   delay(1000);
-*/
+
  
 
 }
@@ -122,38 +145,54 @@ void loop() {
     if((tiempoActual - tiempoMuestra >= periodoMuestreo))
     {     
  //-----------------------Llamar funciones-------------------------
-
-      if (periodo > 0) {
-      rpm = (60* 1000000)/(periodo * dientes);
-      } 
-      Serial.print("RPM: ");
-      Serial.println(rpm);    
+/*
+     if (periodo > 0) {
+     rpm = (60* 1000000)/(periodo * dientes);
+     } 
+     Serial.print("RPM: ");
+     Serial.println(rpm);    
       
-      temperatura_motor = medir_temp_motor(pin_temp_motor , 100 , 50000);    
-      Serial.print("temperatura motor: ");
-      Serial.println(temperatura_motor);   
+     temperatura_motor = medir_temp_motor(pin_temp_motor , 100 , 50000);    
+     Serial.print("temperatura motor: ");
+     Serial.println(temperatura_motor); 
 
 
-      guardar_datos(temperatura_motor , rpm);
- /*...............0   
+     AFR = medir_lambda(pin_lambda);
+     Serial.print("AFR: ");
+     Serial.println(AFR); 
+
+     
+     temperatura_aire = medir_temp_aire(pin_temp_motor , 100 , 50000);    
+     Serial.print("temperatura aire: ");
+     Serial.println(temperatura_aire); 
+        
+     TPS = medir_tps(pin_tps , min_tps , max_tps);
+     Serial.print("TPS: ");
+     Serial.println(temperatura_aire , '%');  
+
+     
+
+     guardar_datos(temperatura_motor , rpm);
+ */
+
  
  //-----------------------Codigo imu-------------------------     
       //inicializaciones para poder llamar a la funcion
       sensors_event_t a, g, temp;
       mpu.getEvent(&a, &g, &temp);
-      calcularFuerzaG(a.acceleration.x, a.acceleration.y, &angulo_fuerzag, &magnitud_fuerzag);
+      
+      float acel_lateral_g;
+      calcularAceleracionLateral(a.acceleration.x, a.acceleration.y, a.acceleration.z, &acel_lateral_g);
+      
+      Serial.print("Aceleracion lateral (g): ");
+      Serial.println(acel_lateral_g, 3);
 
-      aceleracion_x = a.acceleration.x * -1;//aceleracion real, por eso multiplico por -1, va en el otro sentido
 
- //-----------------------Codigo tps-------------------------  
 
-      int valPot = analogRead(pinPot); //leemos el valor del potenciometro del tps
-      float tps = map(valPot, 0, 1023, 0, 100); //lo transformamos a porcentaje
       
  //-----------------------Enviar datos-------------------------
-      matlab_send(aceleracion_x, 1,1);
+     // matlab_send(aceleracion_x, 1,1);
 
-    /*/
       tiempoMuestra = tiempoActual;
     }
   
@@ -183,18 +222,28 @@ Serial.write(b2,4);
 }
 
 //-----------------------IMU-------------------------
-void calcularFuerzaG(float Ax, float Ay, float* angulo, float* magnitud){
-  //transformo en fuerza g 
-  float Ax_G = Ax / 9.81; 
-  float Ay_G = Ay / 9.81;
+void calcularAceleracionLateral(float Ax, float Ay, float Az, float* acel_lateral_g) {
+  // Calcular inclinación
+  float pitch = atan2(-Ax, sqrt(Ay * Ay + Az * Az));
+  float roll  = atan2(Ay, Az);
 
-  *angulo = atan2(Ay_G, Ax_G) * 180.0 / PI;
-  *magnitud = sqrt(Ax_G * Ax_G + Ay_G * Ay_G);
+  // Gravedad proyectada en cada eje
+  float gx = 9.81 * -sin(pitch);
+  float gy = 9.81 *  sin(roll) * cos(pitch);
+  float gz = 9.81 *  cos(roll) * cos(pitch);
+
+  // Quitar gravedad
+  float ax_lin = Ax - gx;
+  float ay_lin = Ay - gy;
+  float az_lin = Az - gz;
+
+  // Aceleración lateral en g (en este ejemplo uso eje Y como lateral)
+  *acel_lateral_g = ay_lin / 9.81;
 }
 
 
 
-//-------------------------Variables temperatura motor---------------------------------
+//-------------------------Funcion temperatura motor---------------------------------
 
 float medir_temp_motor(int pin_motor, float Rmin , float Rmax){
     const float Vcc = 3.3;
@@ -215,6 +264,62 @@ float medir_temp_motor(int pin_motor, float Rmin , float Rmax){
 
     return temp_motor; // resistencia en ohms
 }
+
+//-------------------------Funcion TPS---------------------------------
+
+
+float medir_tps(int pin_tps, int min_val, int max_val) {
+    //min_val y max_val son los limites del potenciometro
+    //min_val = con el acelerador en 0
+    //max_val = con el acelerador en 100
+    
+    //leo lo que mide el potenciometro
+    int lectura = analogRead(pin_tps);
+
+    //lo mapeo entre 0 y 100 asi tengo el porcentaje de acelerador apretado
+    return map(lectura, min_val, max_val, 0, 100);
+}
+
+
+//-------------------------funcion temperatura del aire--------------------------------
+
+
+
+float medir_temp_aire(int pin_aire, float Rmin, float Rmax) {
+    const float Vcc = 3.3;
+    const float R_fija = 3300.0; // ohms
+
+    uint16_t adc_val = analogRead(pin_aire);
+    float vt = (adc_val * Vcc) / 4095.0;
+
+    float Rt = (vt * R_fija) / (Vcc - vt);
+
+    float temp_aire = map(Rt, Rmin, Rmax, 0, 100);
+
+    return temp_aire;
+}
+
+
+//-------------------------funcion lambda---------------------------------
+
+
+float medir_lambda(int pin_afr) {
+  
+    const float Vref = 3.3;
+    uint16_t adc = analogRead(pin_afr);
+
+    float volt = (adc * Vref) / 4095.0; //veo que tension devuelve 
+
+    // Conversión directa sin mapFloat
+    float afr = (volt - 0.2) * (25.0 - 8.7) / (4.8 - 0.2) + 8.7;
+
+    return afr;
+}
+
+
+
+
+
 
 
 
