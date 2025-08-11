@@ -4,7 +4,7 @@
 #define SSpin PA4		// Slave Select en pin digital PA4
 
 File archivo;			// objeto archivo del tipo File
-char nombre_archivo[] = "prueba_7"; 
+char nombre_archivo[] = "aceang.txt"; 
 int dato = 0;
 bool write = 1; // elegir entre leer o escribir
 
