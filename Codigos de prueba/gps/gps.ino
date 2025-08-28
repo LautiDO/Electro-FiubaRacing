@@ -1,7 +1,7 @@
 #include <TinyGPS.h>   // O TinyGPSPlus si prefieres la versión más nueva
 
 TinyGPS gps;
-
+float newData = 0;
 // En STM32, Serial1 usa pines: TX = PA9, RX = PA10
 // Conecta GPS TX → PA10 (RX Blue Pill)
 // GPS RX → PA9 (TX Blue Pill) (si quieres enviarle comandos, opcional)
@@ -11,10 +11,11 @@ void setup() {
   Serial2.begin(9600);        // UART1 para GPS (Neo-7M normalmente usa 9600 baud)}
   
   Serial.println("Inicializando GPS...");
+  
 }
 
 void loop() {
-  bool newData = false;
+  
   unsigned long chars;
   unsigned short sentences, failed;
 
@@ -26,13 +27,15 @@ void loop() {
 
       char c = Serial2.read();
       if (gps.encode(c))  // ¿Llego una nueva sentencia válida?
-        newData = true;
-        //Serial.println(newData);
-        //Serial.println("AGHAS");
+        newData = 2;
+        Serial.println(newData);
+        Serial.println("AGHAS");
     }
   }
 
-  if (newData==0) {
+  if (newData ==2) {
+            Serial.println("Ahbtffv2");
+
     float flat, flon;
     unsigned long age;
     gps.f_get_position(&flat, &flon, &age);
@@ -46,6 +49,7 @@ void loop() {
     Serial.print(" PREC=");
     Serial.print(gps.hdop() == TinyGPS::GPS_INVALID_HDOP ? 0 : gps.hdop());
     Serial.println();
+    newData = 0;
   }
 
   gps.stats(&chars, &sentences, &failed);
