@@ -26,15 +26,16 @@ void loop() {
       //Serial.println("Test1");
 
       char c = Serial2.read();
-      if (gps.encode(c))  // ¿Llego una nueva sentencia válida?
+      if (gps.encode(c)){  // ¿Llego una nueva sentencia válida?
         newData = 2;
-        Serial.println(newData);
-        Serial.println("AGHAS");
+      }
+        //Serial.println(newData);
+        //Serial.println("AGHAS");
     }
   }
 
   if (newData ==2) {
-            Serial.println("Ahbtffv2");
+           // Serial.println("Ahbtffv2");
 
     float flat, flon;
     unsigned long age;
