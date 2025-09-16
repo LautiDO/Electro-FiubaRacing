@@ -6,31 +6,6 @@ import time
 import subprocess
 from simulador_datos import Simulador, FREQ_ARDUINO
 
-"""
-Simualdor de datos en tiempo real.
-La idea es usar esto para emular lo que se recibiría en un puerto usb en tiempo real con los datos de telemetría.
-De esta manera no tenemos que esperar a tener un sistema de radio/4g para poder probar el programa con un stream de datos.
-Usando el simulador de datos, se transmiten datos constantemente al puerto virtual.
-
-DEPENDENCIAS:
-- pyserial: ejecutar el comando "pip install pyserial" en la terminal
-- socat (Linux): sudo apt install socat
-- com0com (Windows): https://sourceforge.net/projects/com0com/
-
-CONFIGURACIÓN POR DEFECTO:
-- Baudrate: 115200
-- Linux: /tmp/ttyArduino (escritura) -> /tmp/ttyReader (lectura)
-- Windows: COM3 (escritura) -> COM4 (lectura)
-
-VISUALIZACIÓN DE LECTURA:
-Si bien la idea es conectar los puertos a la aplicación de telemetría,
-esta bueno verificar que se está escribiendo datos a los puertos.
-- Linux: ejecutar el comando "cat < /tmp/ttyReader" (Cambiar /tmp/ttyReader por el puerto que hayas elegido como lector) en la terminal
-- Windows: ejecutar el comando "copy COM4: CON:" (Cambiar COM4 por el puerto que hayas elegido como lector) en el command prompt
-
-Para más info referirse al README (Me falta hacerlo)
-"""
-
 BAUDRATE = 115200
 #Se pueden modificar los puertos si se quieren crear en otro lado
 VIRTUAL_PORT_ARDUINO_LINUX = '/tmp/ttyArduino'

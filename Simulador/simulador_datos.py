@@ -4,15 +4,7 @@ import time
 import os
 from sys import argv
 
-"""Simulador de valores leidos por sensores.
-Todos los valores son de ejemplo y no corresponden necesariamente
-a valores posibles leídos por el auto de FSAE.
-Véase, los rpm min y max están basados en el glorioso Honda Fit.
-La idea es poder generar archivos formateados csv,
-y archivos txt como los que recibiriamos del arduino, 
-para poder empezar a trabajar con datos"""
-
-FREQ_ARDUINO = 0.02
+FREQ_ARDUINO = 0.02 #El tiempo de actualización del arduino, 20ms
 
 class Simulador:
     def __init__(self):
@@ -115,8 +107,6 @@ class Simulador:
             t_actual += FREQ_ARDUINO
 
     def generar_archivo(self, comando, tiempo, archivo):
-        """Crea los archivos csv o txt en una subcarpeta llamada pruebas,
-        que es creada si no existe"""
         if not os.path.exists("pruebas"):
             os.makedirs("pruebas")
 
@@ -130,7 +120,7 @@ class Simulador:
             if comando == "csv":
                 f.write("tiempo,rpm,tps,t_motor,lambda,t_aire\n") #Header
 
-            total_samples = int(tiempo / FREQ_ARDUINO) #Se manda una actualizacion de los datos cada 20ms
+            total_samples = int(tiempo / FREQ_ARDUINO)
             for i in range(total_samples):
                 t_actual = i * FREQ_ARDUINO
                 self._generar_datos(t_actual)
@@ -151,15 +141,6 @@ class Simulador:
 
 
 if __name__ == "__main__":
-    """El primer parámetro tiene que ser el formato que se desea (csv o el formato definido en el .ino).
-    El segundo parámetro es el tiempo que se quiere simular. No es necesario llenar este parámetro, por default son 300s.
-    El tercero es el nombre del archivo al que se escriben estos datos (solo el nombre, sin la extension).
-    Por default se van a escribir a un archivo llamado datos_prueba.
-    ej: python3 simualador_datos.py csv 300 ejemplo
-    simula 5 minutos (300s) de datos y los guarda con formato csv en ejemplo.csv
-    (No es que tarda 5 minutos en correr).
-    Si no se recibe ningún parámetro adicional,
-    simplemente imprime datos por pantalla indefinidamente"""
     sim = Simulador()
     if len(argv) > 1:
         comando = argv[1]
