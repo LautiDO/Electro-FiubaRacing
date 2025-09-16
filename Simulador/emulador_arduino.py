@@ -1,7 +1,6 @@
 import os.path
 import platform
 import serial
-import serial.tools.list_ports
 import time
 import subprocess
 from simulador_datos import Simulador, FREQ_ARDUINO
