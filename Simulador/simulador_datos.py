@@ -139,11 +139,11 @@ class Simulador:
                     f.write(f"{t_actual:.2f},{self.motor['rpm']},{self.motor['tps']},"
                        f"{self.motor['t_motor']},{self.motor['lambda']},{self.motor['t_aire']}\n")
                 else:
-                    f.write(f"\nRPM: {self.motor["rpm"]}\n"
-                            f"temperatura motor: {self.motor["t_motor"]}\n"
-                            f"AFR: {self.motor["lambda"]}\n"
-                            f"temperatura aire: {self.motor["t_aire"]}\n"
-                            f"TPS: {self.motor["tps"]}\n"
+                    f.write(f"\nRPM: {self.motor['rpm']}\n"
+                            f"temperatura motor: {self.motor['t_motor']}\n"
+                            f"AFR: {self.motor['lambda']}\n"
+                            f"temperatura aire: {self.motor['t_aire']}\n"
+                            f"TPS: {self.motor['tps']}\n"
                             f"Tiempo: {t_actual:.2f}\n")
             print(f"Archivo generado en {path}")
 
