@@ -29,6 +29,11 @@ class Simulador:
         Va desde los 75,6 grados hasta los 114."""
         self.motor["t_motor"] = round((60 + self.motor["t_aire"] + 0.004*self.motor["rpm"]), 2)
 
+    def _t_aire(self):
+        """La temperatura del aire varía +- 0.2 grados en cada instante de tiempo"""
+        self.motor["t_aire"] += random.uniform(-0.2, 0.2)
+        return self.motor["t_aire"]
+
     def _lambda(self):
         """El lambda está influenciado únicamente por los rpm.
         Esto no es del todo realista pero debería dar valores medianamente
@@ -87,19 +92,15 @@ class Simulador:
     def _generar_datos(self, t_actual):
         self._tps(t_actual)
         self._rpm()
+        self._t_aire()
         self._t_motor()
         self._lambda()
 
-    def generar_formato_arduino(self, t_actual):
+    def generar_formato_csv(self, t_actual):
         """Esta función es utilizada únicamente por el archivo de puerto virtual"""
         self._generar_datos(t_actual)
 
-        output = f"""Tiempo: {t_actual:.2f}s
-        RPM: {self.motor['rpm']}
-        temperatura motor: {self.motor['t_motor']}
-        AFR: {self.motor['lambda']}
-        temperatura aire: {self.motor['t_aire']}
-        TPS: {self.motor['tps']}%\n
+        output = f"""{t_actual:.2f}s,{self.motor['rpm']},{self.motor['t_motor']},{self.motor['lambda']},{self.motor['t_aire']: 4.1f},{self.motor['tps']}
         """
         return output
 

@@ -14,6 +14,10 @@ podes hacer 'cat < /tmp/ttyReader' en una nueva consola de Linux, mientras está
 En este momento el emulador solo funciona para linux (lo probé con Ubuntu 24.04)
 """
 
+BAUDRATE = 115200
+VIRTUAL_PORT_ARDUINO = '/tmp/ttyArduino'
+VIRTUAL_PORT_READER = '/tmp/ttyReader'
+
 class VirtualArduino:
     def __init__(self):
         self.puerto = None
@@ -29,17 +33,17 @@ class VirtualArduino:
         try:
             self.socat_process = subprocess.Popen([
                 'socat', '-d0',
-                'pty,raw,echo=0,link=/tmp/ttyArduino',
-                'pty,raw,echo=0,link=/tmp/ttyReader'
+                f'pty,raw,echo=0,link={VIRTUAL_PORT_ARDUINO}',
+                f'pty,raw,echo=0,link={VIRTUAL_PORT_READER}'
             ])
 
-            while not (os.path.exists('/tmp/ttyArduino') and os.path.exists('/tmp/ttyReader')):
+            while not (os.path.exists(VIRTUAL_PORT_ARDUINO) and os.path.exists(VIRTUAL_PORT_READER)):
                 time.sleep(0.1)
             time.sleep(0.5)
-            self.puerto = '/tmp/ttyArduino'
+            self.puerto = VIRTUAL_PORT_ARDUINO
             print("Puertos virtuales creados:")
-            print("   Arduino simulado: /tmp/ttyArduino")
-            print("   Lector: /tmp/ttyReader")
+            print(f"   Arduino simulado: {VIRTUAL_PORT_ARDUINO}")
+            print(f"   Lector: {VIRTUAL_PORT_READER}")
 
         except FileNotFoundError:
             print("socat no encontrado. Instalar con: sudo apt install socat")
@@ -56,7 +60,7 @@ class VirtualArduino:
         try:
             #Por lo que entiendo el baudrate, 115200, es el valor que se le pasa al inicio del archivo .ino,
             #y es la cantidad de unidades de señal por segundo
-            self.ser = serial.Serial(self.puerto, 115200, timeout=1)
+            self.ser = serial.Serial(self.puerto, BAUDRATE, timeout=1)
             if not self.ser.is_open:
                 print("No se pudo abrir el puerto")
                 return
@@ -64,7 +68,7 @@ class VirtualArduino:
 
             t_actual = 0
             while True:
-                data = self.simulador.generar_formato_arduino(t_actual)
+                data = self.simulador.generar_formato_csv(t_actual)
                 if self.ser and self.ser.is_open:
                     self.ser.write(data.encode())
                     time.sleep(FREQ_ARDUINO)
