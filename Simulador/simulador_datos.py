@@ -8,7 +8,7 @@ FREQ_ARDUINO = 0.02 #El tiempo de actualización del arduino, 20ms
 
 class Simulador:
     def __init__(self):
-        self.motor = {
+        self.sensores = {
             "TPS": 0,
             "RPM" : 0,
             "T_aire": round(random.uniform(15, 30), 2),
@@ -18,41 +18,46 @@ class Simulador:
             "A_lineal": 0,
             "FG_mag" : 0,
             "FG_angle" : 0,
-            "Longitud": 0,
-            "Latitud": 0,
+            "Longitud": -58.45991018745831, #coordenadas del Autódromo Oscar y Juan Gálvez
+            "Latitud": -34.69564672421455,
             "Pos_volante": 0,
             "F_suspensión": 0,
             "Pres_neumáticos": 0,
             "T_neumáticos": 0
         }
+        self.centro_lat = -34.69564672421455
+        self.centro_long = -58.45991018745831
+        self.radio_pista = 0.008 #aprox 900 metros de radio, es un ejemplo
+        self.angulo_actual = 0
+
 
     def _t_motor(self):
         """La temperatura del motor tiene un piso de 60, y está más caliente cuanto mayor se la temperatura del aire y los RPM.
         Va desde los 75,6 grados hasta los 114."""
-        self.motor["T_motor"] = round((60 + self.motor["T_aire"] + 0.004*self.motor["RPM"]), 2)
-        return self.motor["T_motor"]
+        self.sensores["T_motor"] = round((60 + self.sensores["T_aire"] + 0.004*self.sensores["RPM"]), 2)
+        return self.sensores["T_motor"]
 
     def _t_aire(self):
         """La temperatura del aire varía +- 0.2 grados en cada instante de tiempo"""
-        self.motor["T_aire"] += random.uniform(-0.2, 0.2)
-        self.motor["T_aire"] = round(self.motor["T_aire"], 2)
-        return self.motor["T_aire"]
+        self.sensores["T_aire"] += random.uniform(-0.2, 0.2)
+        self.sensores["T_aire"] = round(self.sensores["T_aire"], 2)
+        return self.sensores["T_aire"]
 
     def _lambda(self):
         """El Lambda está influenciado únicamente por los RPM.
-        Esto no es del todo realista pero debería dar valores medianamente
+        Si bien tiene que ver, esto no es del todo realista pero debería dar valores medianamente
         cercanos."""
-        if self.motor["RPM"] < 2000:
+        if self.sensores["RPM"] < 2000:
             lambda_base = 1.70
-        elif self.motor["RPM"] < 4000:
-            rpm_factor = (self.motor["RPM"] - 2000) / 2000
+        elif self.sensores["RPM"] < 4000:
+            rpm_factor = (self.sensores["RPM"] - 2000) / 2000
             lambda_base = 1.70 - (rpm_factor * 0.65) #va de 1.70 a 0.4
         else:
             lambda_base = 0.3
 
         ruido = round(random.uniform(-0.3, 0.3), 2)
-        self.motor["Lambda"] = round(lambda_base + ruido,2)
-        return self.motor["Lambda"]
+        self.sensores["Lambda"] = round(lambda_base + ruido,2)
+        return self.sensores["Lambda"]
 
     def _tps(self, t_actual):
         """En resumen, cada 10 segundos se repite el ciclo,
@@ -78,70 +83,165 @@ class Simulador:
             valor = tps_max - (sine * 95)
         else:
             valor = tps_idle
-        ruido = random.randint(-1, 1)
-        self.motor["TPS"] = max(0, min(100, int(valor + ruido))) #Para que no se salga del rango 0-100%
-        return self.motor["TPS"]
+        self.sensores["TPS"] = int(valor)
+        return self.sensores["TPS"]
 
-    def _rpm(self): #En un futuro podrias hacer ciclos mas largos, que vayan simulando los cambios de marcha, y al final vuelve a marcha 1
+    def _rpm(self): #En un futuro podrias hacer ciclos mas largos, que vayan simulando los cambios de marchas, y al final vuelve a marcha 1
         """Dependen del TPS"""
         rpm_idle = 0
         rpm_max = 8400
 
-        tps_normalizado = self.motor["TPS"] / 100
+        tps_normalizado = self.sensores["TPS"] / 100
         factor_rpm = tps_normalizado ** 1.5
         rpm_base = rpm_idle + (rpm_max - rpm_idle) * factor_rpm
 
         ruido = random.randint(-50, 50)
-        self.motor["RPM"] = int(max(rpm_idle, min(rpm_base + ruido, rpm_max))) #Para que no se salga del rango idle-max
-        return self.motor["RPM"]
+        self.sensores["RPM"] = int(max(rpm_idle, min(rpm_base + ruido, rpm_max))) #Para que no se salga del rango idle-max
+        return self.sensores["RPM"]
 
     def _velocidad(self):
         """Que la velocidad dependa del TPS está medio flojo de papeles...
         Básicamente, si el % de TPS x la v_max es mayor a la velocidad registrada en el instante de tiempo previo,
-        se suben hasta 2 km/h.
-        Si es menor, disminuye hasta 3 km/h."""
+        se sube hasta 1 km/h.
+        Si es menor, disminuye hasta 1 km/h."""
         v_min = 0
         v_max = 120
-        velocidad_objetivo = (self.motor["TPS"] / 100) * v_max
-        velocidad_actual = self.motor["Velocidad"]
+        velocidad_objetivo = (self.sensores["TPS"] / 100) * v_max
+        velocidad_actual = self.sensores["Velocidad"]
 
         cambio = 0
         if velocidad_objetivo > velocidad_actual:
-            cambio = min(2, velocidad_objetivo - velocidad_actual)
+            cambio = min(1, velocidad_objetivo - velocidad_actual)
         elif velocidad_objetivo < velocidad_actual:
-            cambio = max(-3, velocidad_objetivo - velocidad_actual)
+            cambio = max(-1, velocidad_objetivo - velocidad_actual)
 
         nueva_velocidad = velocidad_actual + cambio
-        ruido = random.uniform(-1, 1)
-        self.motor["Velocidad"] = round(max(v_min, min(v_max, nueva_velocidad + ruido)), 1)
-        return self.motor["Velocidad"]
+        ruido = random.uniform(-0.2, 0.2)
+        self.sensores["Velocidad"] = round(max(v_min, min(v_max, nueva_velocidad + ruido)), 1)
+        return self.sensores["Velocidad"]
 
     def _a_lineal(self):
-        return self.motor["A_lineal"]
+        """Depende del cambio de velocidades entre instantes."""
+        #NO CONDICE CON LOS VALORES BASE 0-3 QUE ME PASARON...
+        velocidad_anterior = getattr(self, '_velocidad_anterior', self.sensores["Velocidad"])
+        velocidad_actual = self.sensores["Velocidad"]
+
+        delta_v_kmh = velocidad_actual - velocidad_anterior
+        delta_v_ms = delta_v_kmh * (1000 / 3600)
+        aceleracion = delta_v_ms / FREQ_ARDUINO
+        self._velocidad_anterior = velocidad_actual
+
+        self.sensores["A_lineal"] = round(aceleracion, 2)
+        return self.sensores["A_lineal"]
+
+    def _calcular_aceleracion_lateral(self):
+        if self.sensores["Velocidad"] == 0 or self.sensores["Pos_volante"] == 0:
+            return 0
+        velocidad_ms = self.sensores["Velocidad"] * (1000 / 3600)
+        angulo_giro = (self.sensores["Pos_volante"] - 90) * 0.5 #Normalizarlo a -90,90 y reducir a un angulo mas realista
+        angulo_volante_rad = math.radians(abs(angulo_giro))
+        #Lo que viene ahora sale de una fórmula llamada ángulo de Ackermann
+        wheelbase = 1 #distancia entre ejes delantero y trasero en metros
+        if abs(angulo_volante_rad) > 0.01:
+            radio_giro = wheelbase / math.tan(abs(angulo_volante_rad))
+            a_lateral = (velocidad_ms**2) / radio_giro
+            return a_lateral * (1 if self.sensores["Pos_volante"] > 90 else -1)
+        return 0
+
 
     def _fg_mag(self):
-        return self.motor["FG_mag"]
+        a_long = self.sensores["A_lineal"]
+        a_lateral = self._calcular_aceleracion_lateral()
+        total = math.sqrt(a_long ** 2 + a_lateral ** 2)
+        self.sensores["FG_mag"] = round(total / 9.81, 2)
+        return self.sensores["FG_mag"]
 
     def _fg_angle(self):
-        return self.motor["FG_angle"]
+        """Va de 0-360°.
+        0° = Frontal (aceleración hacia adelante)
+        90° = Lateral derecha
+        180° = Trasera
+        270° = Lateral izquierda.
+        No necesariamente está implementado así en el auto!"""
+        a_long = self.sensores["A_lineal"]
+        a_lateral = self._calcular_aceleracion_lateral()
+
+        if a_long == 0 and a_lateral == 0:
+            angle = 0
+        else:
+            angle_rad = math.atan2(a_lateral, a_long)
+            angle = math.degrees(angle_rad)
+            if angle < 0:
+                angle += 360
+
+        self.sensores["FG_angle"] = int(angle)
+        return self.sensores["FG_angle"]
 
     def _longitud(self):
-        return self.motor["Longitud"]
+        if self.sensores["Velocidad"] == 0:
+            return self.sensores["Longitud"]
+
+        velocidad_ms = self.sensores["Velocidad"] * (1000/3600)
+        perimetro_pista = 2 * math.pi * self.radio_pista * 111320 #Perimetro es 2pi*radio, y metros = grados de long/lat * 1113200 (const)
+        if perimetro_pista > 0:
+            velocidad_angular = (velocidad_ms * FREQ_ARDUINO) / perimetro_pista * 360
+            self.angulo_actual += velocidad_angular
+
+            if self.angulo_actual >= 360:
+                self.angulo_actual -= 360
+
+            long_offset = self.radio_pista * math.cos(math.radians(self.angulo_actual))
+            self.sensores["Longitud"] = self.centro_long + long_offset
+
+        self.sensores["Longitud"] = round(self.sensores["Longitud"], 8)
+        return self.sensores["Longitud"]
 
     def _latitud(self):
-        return self.motor["Latitud"]
+        if self.sensores["Velocidad"] == 0:
+            return self.sensores["Latitud"]
+
+        lat_offset = self.radio_pista * math.sin(math.radians(self.angulo_actual))
+        factor_latitud = math.cos(math.radians(self.centro_lat))
+        lat_offset_ajustado = lat_offset / factor_latitud
+        self.sensores["Latitud"] = self.centro_lat + lat_offset_ajustado
+
+        self.sensores["Latitud"] = round(self.sensores["Latitud"], 8)
+        return self.sensores["Latitud"]
 
     def _pos_volante(self):
-        return self.motor["Pos_volante"]
+        """Va de 0 a 180° (0 = izquierda, 90 = centro, 180 = derecha)"""
+        if self.sensores["Velocidad"] > 5:
+            base = 85
+            cambio = random.randint(-4, 4)
+            pos = base + cambio
+            self.sensores["Pos_volante"] = max(0, min(180, pos))
+        else:
+            self.sensores["Pos_volante"] = 90
+        return self.sensores["Pos_volante"]
 
     def _f_suspension(self):
-        return self.motor["F_suspensión"]
+        peso_base = 300 * 9.81
+        a_lateral = abs(self._calcular_aceleracion_lateral())
+        a_long = abs(self.sensores["A_lineal"])
+
+        return self.sensores["F_suspensión"]
 
     def _pres_neumaticos(self):
-        return self.motor["Pres_neumáticos"]
+        p_base = 32 #PSI
+        factor_temp = 1 + (self.sensores["T_aire"] - 20) * 0.003
+        ruido = random.uniform(-1.5, 1.5)
+        presion = p_base * factor_temp + ruido
+        self.sensores["Pres_neumáticos"] = round(max(26, min(40, presion)), 1)
+        return self.sensores["Pres_neumáticos"]
 
     def _t_neumaticos(self):
-        return self.motor["T_neumáticos"]
+        t_base = self.sensores["T_aire"] + 15
+        t_vel = self.sensores["Velocidad"] * 0.3
+        t_fg = self.sensores["FG_mag"] * 6
+        ruido = random.uniform(-3, 3)
+        t_final = t_base + t_vel + t_fg + ruido
+        self.sensores["T_neumáticos"] = round(max(15, min(100, t_final)), 1)
+        return self.sensores["T_neumáticos"]
 
     def _generar_datos(self, t_actual):
         self._tps(t_actual)
@@ -164,7 +264,7 @@ class Simulador:
         """Esta función es utilizada únicamente por el archivo de puerto virtual"""
         self._generar_datos(t_actual)
 
-        output = [f"{t_actual:.2f}s"] + [str(self.motor[i]) for i in self.motor]
+        output = [f"{t_actual:.2f}s"] + [str(self.sensores[i]) for i in self.sensores]
         return ",".join(output) + "\n"
 
     def imprimir_datos_inf(self):
@@ -172,7 +272,7 @@ class Simulador:
         while True:
             self._generar_datos(t_actual)
             output = [f"t={t_actual:.2f}s"]
-            for key, value in self.motor.items():
+            for key, value in self.sensores.items():
                 output.append(f"{key}: {value}")
             print(" | ".join(output) + "\n")
             time.sleep(FREQ_ARDUINO)
@@ -190,7 +290,7 @@ class Simulador:
 
         with open(path, 'w+') as f: #Ojo que esto sobreescribe un archivo si ya existe
             if comando == "csv":
-                header = ["tiempo"] + list(self.motor.keys())
+                header = ["tiempo"] + list(self.sensores.keys())
                 f.write(",".join(header) + "\n")
 
             total_samples = int(tiempo / FREQ_ARDUINO)
@@ -199,14 +299,13 @@ class Simulador:
                 self._generar_datos(t_actual)
 
                 if comando == "csv":
-                    fila = [f"{t_actual:.2f}"] + [str(i) for i in self.motor.values()]
+                    fila = [f"{t_actual:.2f}"] + [str(i) for i in self.sensores.values()]
                     f.write(",".join(fila) + "\n")
                 else:
                     f.write(f"\nTiempo: {t_actual:.2f}\n")
-                    for key, value in self.motor.items():
+                    for key, value in self.sensores.items():
                         f.write(f"{key}: {value}\n")
             print(f"Archivo generado en {path}")
-
 
 
 if __name__ == "__main__":
