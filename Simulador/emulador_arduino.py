@@ -21,7 +21,7 @@ class VirtualArduino:
         self.sistema = platform.system().lower()
 
 
-    def crear_puertos_linux(self):
+    def crear_puertos_linux_macos(self):
         """
         Con socat (comando de linux) tiene que haber una fuente y un destino.
         Lo que ttyArduino escribe, ttyReader lee.
@@ -68,8 +68,8 @@ class VirtualArduino:
             return False
 
     def simular_arduino_serial(self):
-        if self.sistema == "linux":
-            if not self.crear_puertos_linux():
+        if self.sistema == "linux" or self.sistema == "darwin":
+            if not self.crear_puertos_linux_macos():
                 return
         elif self.sistema == "windows":
             if not self.crear_puertos_windows():
