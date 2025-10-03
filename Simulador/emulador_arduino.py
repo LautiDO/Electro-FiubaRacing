@@ -90,9 +90,9 @@ class VirtualArduino:
 
             t_actual = 0
             while True:
-                data = self.simulador.generar_formato_csv(t_actual)
+                data = self.simulador.parse_sensors(t_actual)
                 if self.ser and self.ser.is_open:
-                    self.ser.write(data.encode())
+                    self.ser.write((data + "\n").encode())
                     time.sleep(FREQ_ARDUINO)
                     t_actual += FREQ_ARDUINO
 
