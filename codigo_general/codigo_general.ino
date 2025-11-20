@@ -6,21 +6,27 @@
 #include <math.h>
 #include <SPI.h>    // libreria interfaz SPI
 #include <SD.h>     // libreria para tarjetas SD
+#include <TinyGPS.h> 
 
 //-------------------------Variables guardado memoria---------------------------------
 
-#define SSpin PA4	// pin SS para guardar datos en memoria 
 
-File archivo;			// objeto archivo del tipo File
-char nombre_archivo[] = "aceang.txt"; 
-//bool write = 1; // elegir entre leer o escribir
+#define SSpin PA4     // cambiar a PA15 CUANDO CAMBIEMOS EL PCB
+bool test;
+File archivo;      // objeto archivo del tipo File
+//char nombre_archivo[] = "aceang.txt"; 
+char nombre_archivo[] = "asd.txt"; 
+int dato = 0;
+bool write_on = 1; // elegir entre leer o escribir
 
- 
 
-  
 unsigned long tiempoMuestra=0;
 const int periodoMuestreo = 20;   //cada cuanto tiempo se toman muestras en milisegundos
 
+
+// Contador para hacer flush() cada N escrituras
+int contador_memoria = 0;
+bool flag_interrupcion = false;
 
 //-------------------------Variables IMU---------------------------------
 
@@ -45,13 +51,20 @@ float aceleracion_x = 0;
 //-------------------------Variables TPS---------------------------------
 
 const int pinPot = PA6;
-float TPS = 0;
+float tps = 0;
 
 //-------------------------Variables temperatura motor---------------------------------
 
-int pin_temp_motor = PA7;
+int pin_temp_motor = PA0;
 
 float temperatura_motor = 0;
+
+
+#define VCC 5.0          // Tensión de referencia
+#define R_SERIE 4700.0    // Resistencia fija en serie (ajustala según tu circuito)
+#define BETA 2900.0       // Constante beta del NTC
+#define R0 1580.0         // Resistencia del NTC a 25°C
+#define T0 298.15         // 25°C en Kelvin
 
 
 
@@ -63,7 +76,7 @@ float temperatura_aire = 0;
 
 //-------------------------Variables IMU---------------------------------
 
-int pin_tps = PA9; //fijarse cual era el asignado
+int pin_tps = PA11; //fijarse cual era el asignado
 int min_tps=0;
 int max_tps =1023;//esto hay que cambiarlo una vez puesto en el motor
 
@@ -75,29 +88,93 @@ int pin_lambda = PB1;
 
 
 
+//-------------------------Variables GPS---------------------------------
+
+unsigned long chars;
+unsigned short sentences, failed;
+TinyGPS gps;
+float newData = 0;
+float flat, flon;
+unsigned long age;
+float contadorgps = 0;
+
+
+//--------------------------------------- Logica antirebote ----------- 
+bool grabando_datos = false;
+volatile unsigned long tiempo_ultimo_rebote = 0;
+const long demora_rebote = 250; // Tiempo en ms para ignorar rebotes
 //--------------------------------------------------------------------
 
 void setup() {
 
 Serial.begin(115200);
-Serial.println("Setup ok");	
+Serial2.begin(9600);        // UART1 para GPS (Neo-7M normalmente usa 9600 baud)} CAMBIAR A SERIAL3
+  
+
+Serial.print("setup");
 
 pinMode(PA12, INPUT);  // Configura PA12 como entrada
+
 attachInterrupt(digitalPinToInterrupt(PA12), RPM, FALLING);  // Interrupción por flanco descendente
 
 
-//-------------------------Inicializacion Memoria-------------------------------
+
+pinMode(PB13, INPUT_PULLUP);
+attachInterrupt(digitalPinToInterrupt(PB13) ,isr_boton , FALLING);
+
+
+pinMode(SSpin, OUTPUT);
+digitalWrite(SSpin, HIGH);  // CS inactivo (muy importante)
+
 Serial.println("Inicializando tarjeta ...");
-  if (!SD.begin(SSpin)) {			
+  if (!SD.begin(SSpin)) {      
     Serial.println("fallo en inicializacion !");
-    return;					
+    return;         
   }
-Serial.println("inicializacion correcta");
+  Serial.println("inicializacion correcta");  
+
+  // lectura del archivo
+ /*
+ if(!write_on){
+  archivo = SD.open(nombre_archivo, FILE_WRITE);
+    if (archivo) {    
+      while (archivo.available()) {   // mientras exista contenido en el archivo
+        Serial.write(archivo.read());     // lectura de a un caracter por vez
+      }
+      archivo.close();        
+    } else {
+      Serial.println("error en la apertura de prueba.txt");
+    }
+  }
+*/
+
+
+    
+/*
+Serial.println("Inicializando tarjeta ...");  // texto en ventana de monitor
+test = SD.begin(SSpin);
+
+
+
+  Serial.println((int)test);
+  if (!test) {      // inicializacion de tarjeta SD
+    Serial.println("fallo en inicializacion !");// si falla se muestra texto correspondiente y
+    return;         // se sale del setup() para finalizar el programa
+  }
+
+
+  Serial.println("inicializacion correcta");  // texto de inicializacion correcta
+  archivo = SD.open("prueba.txt", FILE_WRITE);  // apertura para lectura/escritura de archivo prueba.txt
+
+
+*/
+
+
+
 
 delay(1000);
-
-
   //------------------------Inicializacion de la IMU--------------------------------
+ /*
   // Try to initialize!
   if (!mpu.begin()) {
     Serial.println("Failed to find MPU6050 chip");
@@ -119,6 +196,7 @@ delay(1000);
   
   delay(1000);
 
+ */
  
 
 }
@@ -131,26 +209,100 @@ void loop() {
 
   
 
-    if((tiempoActual - tiempoMuestra >= periodoMuestreo))
-    {     
+    if((tiempoActual - tiempoMuestra >= periodoMuestreo)){ 
+
+
+
+      
  //-----------------------Llamar funciones-------------------------
+   temperatura_motor = medir_temp_motor(pin_temp_motor);    
+   //Serial.print("tension medida motor: ");
+   //Serial.println(temperatura_motor); 
+
+   temperatura_aire = medir_temp_aire(PA1);
+   //Serial.print("tension medida aire: ");
+   //Serial.println(temperatura_aire); 
+    
+   tps = medir_tps(PB0 , 565 , 1336);
+   //Serial.print("adc tps: ");
+   //Serial.println(tps); 
+  
+    //Leemos afr para despues guardarlo
+    //AFR = medir_lambda(pin_lambda);
+    //Serial.print("AFR: ");
+    //Serial.println(AFR); 
+
+
+    guardar_datos(temperatura_aire ,temperatura_motor);
+    contador_memoria = contador_memoria + 1;
+    
+    Serial.println(contador_memoria);
+    if((contador_memoria > 50) && (grabando_datos) && write_on == 1){ 
+      //esperamos 50 iteraciones para guardar 
+      Serial.println("guardando cada 50 iteraciones");
+      archivo.flush();
+      contador_memoria = 0;
+    }
+
+    Serial.println(grabando_datos);
+    
+    //aca es solo para abrir el archivo
+    //Serial.println(grabando_datos);
+    if (flag_interrupcion) {
+    Serial.println("hola");
+    // Se detectó una pulsación, ahora hacemos el anti-rebote
+    if (millis() - tiempo_ultimo_rebote > demora_rebote) {
+
+      // Es una pulsación válida, cambiamos el estado
+      grabando_datos = !grabando_datos;
+      if (grabando_datos) {
+                
+        // --- LÓGICA PARA INICIAR GRABACIÓN ---
+        Serial.println("Iniciando grabación...");
+        
+        // Abrimos el archivo y lo guardamos en la variable GLOBAL
+        archivo = SD.open(nombre_archivo, FILE_WRITE);
+        if (archivo) {
+          // Escribimos la cabecera del archivo
+          archivo.println("temp_aire,temp_motor");
+          
+          Serial.println("Archivo abierto correctamente.");
+        } else {
+          Serial.println("Error al abrir el archivo.");
+          grabando_datos = false; // No podemos grabar, cancelamos
+        }
+        
+      } else {
+        // --- LÓGICA PARA DETENER GRABACIÓN ---
+        Serial.println("...Grabación detenida.");
+        
+        if (archivo) {
+          archivo.close(); // Cerramos el archivo
+          Serial.println("Archivo cerrado y guardado.");
+        }
+      }
+      tiempo_ultimo_rebote = millis(); // Actualizamos el tiempo
+    }
+    flag_interrupcion = false; // Reseteamos la bandera
+  }
+
+
+    
 /*
      if (periodo > 0) {
      rpm = (60* 1000000)/(periodo * dientes);
      } 
      Serial.print("RPM: ");
-     Serial.println(rpm);    
+     Serial.println(rpm);  
+
+       
       
-     temperatura_motor = medir_temp_motor(pin_temp_motor , 100 , 50000);    
-     Serial.print("temperatura motor: ");
-     Serial.println(temperatura_motor); 
 
 
-     AFR = medir_lambda(pin_lambda);
-     Serial.print("AFR: ");
-     Serial.println(AFR); 
+*/
 
-     
+
+ /*    
      temperatura_aire = medir_temp_aire(pin_temp_motor , 100 , 50000);    
      Serial.print("temperatura aire: ");
      Serial.println(temperatura_aire); 
@@ -159,12 +311,11 @@ void loop() {
      Serial.print("TPS: ");
      Serial.println(temperatura_aire , '%');  
 
-     
 
      guardar_datos(temperatura_motor , rpm);
  */
 
- 
+ /*
  //-----------------------Codigo imu-------------------------     
       //inicializaciones para poder llamar a la funcion
       sensors_event_t a, g, temp;
@@ -175,19 +326,59 @@ void loop() {
       
       Serial.print("Aceleracion lateral (g): ");
       Serial.println(acel_lateral_g, 3);
-      guardar_datos(acel_lateral_g);
 
+    */
+    
+//-----------------------Codigo GPS------------------------- 
+  
+    
+    char c = Serial2.read();
+    if (gps.encode(c)){  // ¿Llego una nueva sentencia válida?
+      newData = 2;
+       // v v  Serial.println(newData);
+    }
+    if (newData ==2) {
+      float flat, flon;
+      unsigned long age;
+      gps.f_get_position(&flat, &flon, &age);
+      Serial.print("LAT=");
+      Serial.print(flat == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flat, 6);
+      Serial.print(" LON=");
+      Serial.print(flon == TinyGPS::GPS_INVALID_F_ANGLE ? 0.0 : flon, 6);
+      Serial.print(" SAT=");
+      Serial.print(gps.satellites() == TinyGPS::GPS_INVALID_SATELLITES ? 0 : gps.satellites());
+      Serial.print(" PREC=");
+      Serial.print(gps.hdop() == TinyGPS::GPS_INVALID_HDOP ? 0 : gps.hdop());
+      Serial.println();
+      newData = 0;
+      
+    }
+
+
+      
  //-----------------------Enviar datos-------------------------
      // matlab_send(aceleracion_x, 1,1);
-
       tiempoMuestra = tiempoActual;
     }
   
 }
 
 
+
+
+//-------------------------TERMINA EL LOOP---------------------------------
+
+
 //-------------------------FUNCIONES---------------------------------
 
+
+//-------------------------funcion RPM---------------------------------
+void RPM()                                  //Funcion a realizar en cada interrupcion externa del pin 2
+{
+  currentmicros = micros();                 //Almacenamos los us transcurridos en la variable currentmicros
+  periodo = currentmicros - previousmicros; //El periodo de la señal serán los us actuales menos los us anteriores
+  previousmicros = currentmicros;           //Igualamos us actuales a us anteriores para calcular el proximo periodo
+} 
 
 //-----------------------Envio de datos a MATLAB-------------------------
 void matlab_send(float dato1, float dato2, float dato3){
@@ -229,27 +420,68 @@ void calcularAceleracionLateral(float Ax, float Ay, float Az, float* acel_latera
 
 
 
-//-------------------------Funcion temperatura motor---------------------------------
+//-------------------------Funcion temperatura motor (refrigerante)---------------------------------
 
-float medir_temp_motor(int pin_motor, float Rmin , float Rmax){
-    const float Vcc = 3.3;
-    const float R_fija = 3300.0; // ohms
 
-    // Leer el ADC (0 a 4095) y convertir a voltaje
-    uint16_t adc_val = analogRead(pin_motor);
-    
-    float vt = (adc_val * Vcc) / 4095.0;
+float medir_temp_motor(int pin_motor) {
+  const float V_IN = 3.85;         // Voltaje de referencia
+  const float ADC_RESOLUCION = 4095.0; // ADC de 12 bits (0–4095)
 
-     Serial.print("tension leida: ");
-     Serial.println(vt);    
-    
-    // Calcular resistencia del termistor
-    float Rt = (vt * R_fija) / (Vcc - vt);
-    //map(potValor, potMin, potMax, 0, 180);
-    float temp_motor = map(Rt , Rmin , Rmax, 0 , 100);
+  // Coeficientes del polinomio de grado 2:
+  // y = a*x^2 + b*x + c
+  const float a = 17.59706f;
+  const float b = -88.82485f;
+  const float c = 120.0151f;
 
-    return temp_motor; // resistencia en ohms
+  float r1 = 9650;
+  float r2 = 20410;
+  // Leer ADC
+  int adc = analogRead(pin_motor);
+
+  // Convertir a voltaje (si el sensor entrega tensión)
+  float Vdivisor = (adc * V_IN) / ADC_RESOLUCION;
+
+  float Vmedido = Vdivisor * (r1 + r2)/r1; //lo vuelvo a llevar a 5v
+
+  // Calcular temperatura usando el polinomio cuadrático
+  float Tc = (a * Vmedido * Vmedido) + (b * Vmedido) + c;
+
+  return Vmedido;
 }
+
+
+//-------------------------funcion temperatura del aire--------------------------------
+
+
+
+float medir_temp_aire(int pin_aire) {
+  const float V_IN = 3.96;         // Voltaje de referencia 12v * relacion del divisor = 12 * r1 / (r1+r2)
+  const float ADC_RESOLUCION = 4095.0; // ADC de 12 bits (0–4095)
+
+  // Coeficientes del polinomio de grado 2:
+  // y = a*x^2 + b*x + c
+  const float a = 17.59706f;
+  const float b = -88.82485f;
+  const float c = 120.0151f;
+
+  float r1 = 9930;
+  float r2 = 20120;
+  // Leer ADC
+  int adc = analogRead(pin_aire);
+
+  // Convertir a voltaje (si el sensor entrega tensión)
+  float Vdivisor = (adc * V_IN) / ADC_RESOLUCION;
+
+  float Vmedido = Vdivisor * (r1 + r2)/r1; //lo vuelvo a llevar a 5v
+
+  // Calcular temperatura usando el polinomio cuadrático
+  float Tc = (a * Vmedido * Vmedido) + (b * Vmedido) + c;
+
+  return Vmedido;
+}
+
+
+
 
 //-------------------------Funcion TPS---------------------------------
 
@@ -263,27 +495,10 @@ float medir_tps(int pin_tps, int min_val, int max_val) {
     int lectura = analogRead(pin_tps);
 
     //lo mapeo entre 0 y 100 asi tengo el porcentaje de acelerador apretado
-    return map(lectura, min_val, max_val, 0, 100);
+    return map(lectura, min_val, max_val, 100, 0);
 }
 
 
-//-------------------------funcion temperatura del aire--------------------------------
-
-
-
-float medir_temp_aire(int pin_aire, float Rmin, float Rmax) {
-    const float Vcc = 3.3;
-    const float R_fija = 3300.0; // ohms
-
-    uint16_t adc_val = analogRead(pin_aire);
-    float vt = (adc_val * Vcc) / 4095.0;
-
-    float Rt = (vt * R_fija) / (Vcc - vt);
-
-    float temp_aire = map(Rt, Rmin, Rmax, 0, 100);
-
-    return temp_aire;
-}
 
 
 //-------------------------funcion lambda---------------------------------
@@ -293,13 +508,15 @@ float medir_lambda(int pin_afr) {
   
     const float Vref = 3.3;
     uint16_t adc = analogRead(pin_afr);
-
+    
     float volt = (adc * Vref) / 4095.0; //veo que tension devuelve 
 
     // Conversión directa sin mapFloat
-    float afr = (volt - 0.2) * (25.0 - 8.7) / (4.8 - 0.2) + 8.7;
+    
+    //float afr map()
+    float afr = 6.161 * volt + 9.127;
 
-    return afr;
+return afr;
 }
 
 
@@ -309,41 +526,59 @@ float medir_lambda(int pin_afr) {
 
 
 
-//-------------------------funcion RPM---------------------------------
-void RPM()                                  //Funcion a realizar en cada interrupcion externa del pin 2
-{
-  currentmicros = micros();                 //Almacenamos los us transcurridos en la variable currentmicros
-  periodo = currentmicros - previousmicros; //El periodo de la señal serán los us actuales menos los us anteriores
-  previousmicros = currentmicros;           //Igualamos us actuales a us anteriores para calcular el proximo periodo
-} 
 
 
 //-------------------------funcion guardar datos---------------------------------
 
-void guardar_datos(float dato1){
-  //escritura del archivo
-    archivo = SD.open(nombre_archivo, FILE_WRITE);	
 
-    if (archivo) {
-      Serial.println("Escribiendo");
-      archivo.print("aceleracion lateral ");
-      archivo.println(dato1);
-      archivo.close(); 
-    } else {
-      Serial.println("error en apertura del archivo");
+
+
+//-------------------------funcion guardar datos---------------------------------
+
+/*
+void guardar_datos(float dato1 , float dato2 ,File archivo){
+    contador_escritura = 0;
+    if(write){
+      //File archivo = SD.open("aceang.txt", FILE_WRITE);  // apertura para lectura/escritura de archivo prueba.txt
+      //archivo = SD.open(nombre_archivo, FILE_WRITE);  
+      if (archivo){
+        archivo.println("rpm");
+        archivo.println(dato1);  // escritura de una linea de texto en archivo
+        archivo.println("temp");
+        archivo.println(dato2);  // escritura de una linea de texto en archivo
+        Serial.println("Escribiendo en archivo prueba.txt..."); // texto en monitor serie
+        //archivo.close();        // cierre del archivo
+        Serial.println("escritura correcta"); // texto de escritura correcta en monitor serie
+      } else {
+        Serial.println("error en apertura de prueba.txt");  // texto de falla en apertura de archivo
+      }
+  
     }
-    
+  
 }
 
- // lectura del archivo
- /*if(!write){
-  archivo = SD.open(nombre_archivo);
-    if (archivo) {		
-      while (archivo.available()) {		// mientras exista contenido en el archivo
-        Serial.write(archivo.read());  		// lectura de a un caracter por vez
-      }
-      archivo.close();				
-    } else {
-      Serial.println("error en la apertura de prueba.txt");
-    }
-  }*/
+*/
+/*
+ * =======================================================================
+ * ==         ISR CON LÓGICA ANTI-REBOTE (DEBOUNCE) INTEGRADA           ==
+ * =======================================================================
+ * Esta función se ejecuta en cada flanco de bajada del pin del botón.
+ * 
+ * 
+ */
+
+void guardar_datos(float dato1, float dato2) {
+  if (archivo) { // Solo si el archivo es válido
+    archivo.print(dato1);
+    archivo.print(",");
+    archivo.println(dato2);
+  }
+  else{
+    Serial.print("archivo no abierto");
+  }
+}
+
+
+void isr_boton() {
+  flag_interrupcion = true; // Solo levanta la bandera
+}
