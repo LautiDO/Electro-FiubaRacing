@@ -6,19 +6,26 @@
 File archivo;			// objeto archivo del tipo File
 char nombre_archivo[] = "aceang.txt"; 
 int dato = 0;
-bool write = 1; // elegir entre leer o escribir
+bool write = true; // elegir entre leer o escribir
 
 void setup() {
 
   Serial.begin(9600);
 
   Serial.println("Inicializando tarjeta ...");
-  if (!SD.begin(SSpin)) {			
-    Serial.println("fallo en inicializacion !");
-    return;					
+  //if (!SD.begin(SSpin)) {			
+    //Serial.println("fallo en inicializacion !");
+    //return;					
+  //}
+  //Serial.println("inicializacion correcta");	
+  
+// Inicialización
+  if (!SD.begin(SSpin)) {
+    Serial.println("Fallo: No se detecta la tarjeta o el formato es incorrecto.");
+    // Bucle infinito para detener la ejecución si no hay SD
+    while (1); 
   }
-  Serial.println("inicializacion correcta");	
-
+  Serial.println("SD Iniciada correctamente.");
   // lectura del archivo
  if(!write){
   archivo = SD.open(nombre_archivo);
@@ -46,6 +53,7 @@ void loop() {
       archivo.close(); 
     } else {
       Serial.println("error en apertura del archivo");
+      Serial.println(archivo);
     }
     dato = dato+1;
   }
