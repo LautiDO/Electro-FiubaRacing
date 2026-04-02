@@ -4,7 +4,7 @@
 #include <SPI.h>
 #include <Adafruit_MPU6050.h>
 #include <Adafruit_Sensor.h>
-#include <VL53L0X.h>
+//#include <VL53L0X.h>
 #include <Wire.h>
 #include <TinyGPS.h>
 
