@@ -1,0 +1,16 @@
+C:\Users\Gonzalo>tailscale status
+100.93.45.4     f15              gonzaloenriqu399@  windows  -
+100.82.207.33   desktop-1mlibc2  mariana2reis11@    windows  -
+100.118.62.119  fiubaracing      mariana2reis11@    linux    -
+
+
+%%%%%%%%%% -----------------------------
+ssh fiubaracing@100.118.62.119
+
+%%%%%%%%%% Pasar archivos hacia la RASPI, en cmd ubicarte en la capita del archivo en 
+scp nombre_del_archivo.py fiubaracing@100.118.62.119:/home/fiubaracing/
+scp nombre_del_archivo.py fiubaracing@10.90.107.2:/home/fiubaracing/
+
+ubicarse en cmd en la carpeta que queremos pasar los archivos y ejecutar el comando
+scp fiubaracing@10.90.107.2:~/DAQ_mejora_de_latencia.py .
+
