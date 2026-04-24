@@ -1,11 +1,8 @@
 import can
 import time
 
-# --- FUNCIÓN UNIVERSAL DE EMPAQUETAMIENTO ---
 def preparar_payload(current_payload, valor, offset, length, mask, multiplier, divisor, adder):
-    """
-    Inserta un dato en el payload de 8 bytes siguiendo las regla de la tabla.
-    """
+
     # Escalamiento 
     raw = int((valor - adder) * divisor / multiplier)
     
@@ -21,7 +18,7 @@ def preparar_payload(current_payload, valor, offset, length, mask, multiplier, d
         
     return current_payload
 
-# --- CONFIGURACIÓN DEL BUS ---
+# --- CONFIGURACIÓN DEL BUS CAN ---
 try:
     bus = can.interface.Bus(channel='can0', bustype='socketcan')
 except OSError:

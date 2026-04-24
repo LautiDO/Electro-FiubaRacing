@@ -1,0 +1,15 @@
+        sudo dtoverlay mcp2515-can0 oscillator=8000000 interrupt=25
+Pa verificar la conexion del transeptor:
+        dmesg | grep -i mcp251x
+Prueba de conexcion:
+        sudo ip link set can0 down (si no funciona este probar con el siguiente comando, para leventar el can0)
+	sudo ip link set can0 up type can bitrate 500000 loopback on
+	ip -details link show
+	
+Nueva terminal para escuchar
+        candump can0
+otra termina para enviar
+        cansend can0 123#DEADBEEF
+
+
+
