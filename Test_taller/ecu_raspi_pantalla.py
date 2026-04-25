@@ -11,7 +11,7 @@ from datetime import datetime
 COM_PORT_MANUAL = "/dev/ttyUSB0"
 BAUDRATE = 115200
 
-# --- MACROS Y DICCIONARIOS CAN ---
+# --- MACROS Y Diccinario de parametros ---
 ID_MOTOR      = 0x640
 ID_TEMP       = 0x649
 
@@ -28,8 +28,8 @@ ADD_BASE  = 0
 ADD_TEMP  = -400
 
 CAN_CHANNEL  = 'can0'
-BITRATE      = 500000 
 
+# Aqui agregamos los valores que necesitamos enviar para la pantalla
 SIG_RPM     = {'off': 0, 'len': LEN_16BIT, 'mask': MASK_16BIT, 'mult': MULT_BASE, 'div': DIV_RPM,  'add': ADD_BASE}
 SIG_TPS     = {'off': 6, 'len': LEN_16BIT, 'mask': MASK_16BIT, 'mult': MULT_BASE, 'div': DIV_BASE, 'add': ADD_BASE}
 SIG_COOLANT = {'off': 0, 'len': LEN_8BIT,  'mask': MASK_8BIT,  'mult': MULT_TEMP, 'div': DIV_BASE, 'add': ADD_TEMP}
@@ -74,6 +74,7 @@ def procesar_datos(payload, timestamp_float, csv_writer):
         pass
     return None
 
+#------------- CAN -------------------------
 def preparar_payload(payload, valor, sig):
     raw = int((valor - sig['add']) * sig['div'] / sig['mult'])
     raw &= sig['mask']
@@ -89,13 +90,16 @@ if __name__ == "__main__":
     home_dir = os.path.expanduser("~")
     nombre_archivo = os.path.join(home_dir, f"datalog_r1000_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv")
 
-    # Inicialización del Bus CAN
+    # ----------------Init config Bus CAN---------------------------------------
+
     try:
         bus = can.interface.Bus(channel=CAN_CHANNEL, bustype='socketcan')
-        sys.stdout.write(f"Bus CAN ({CAN_CHANNEL}) iniciado correctamente.\n")
+        sys.stdout.write(f"Bus CAN iniciado\n")
     except OSError:
-        sys.stdout.write(f"ERROR: {CAN_CHANNEL} no encontrado. Ejecuta: sudo ip link set {CAN_CHANNEL} up type can bitrate {BITRATE}\n")
+        sys.stdout.write(f"Bus CAN no encontrado\n")
         exit()
+
+    # -----------------End config Bus CAN-------------------------------------
 
     try:
         ser = serial.Serial(COM_PORT_MANUAL, BAUDRATE, timeout=0)
@@ -124,7 +128,7 @@ if __name__ == "__main__":
             contador_display = 0
             
             last_request_time = 0
-            period = 0.04  # 25 Hz
+            period = 0.04  # 25 Hz El periodo de recpcion de los datos de la ECU
             timestamp_read = datetime.now()
 
             while True:
@@ -152,25 +156,24 @@ if __name__ == "__main__":
                             payload_ecu = trama_completa[10:-2]
                             datos = procesar_datos(payload_ecu, timestamp_read, writer)
 
-                            # Puente de datos: Extraemos de la ECU y enviamos por CAN
+                            # Evio mediante el bus CAN
                             if datos:
                                 ecu_ms, rpm, afr, tps, vbat, temp_motor = datos
                                 
-                                # --- Empaquetamiento y Envío CAN: MOTOR (0x640) ---
+                                # --- Parametros del MOTOR  ---
                                 payload_640 = [0] * 8 
                                 payload_640 = preparar_payload(payload_640, rpm, SIG_RPM) 
                                 payload_640 = preparar_payload(payload_640, tps, SIG_TPS) 
                                 bus.send(can.Message(arbitration_id=ID_MOTOR, data=payload_640, is_extended_id=False))
 
-                                # --- Empaquetamiento y Envío CAN: TEMPERATURAS (0x649) ---
+                                # --- Parametros de temperaturas ---
                                 payload_649 = [0] * 8 
                                 payload_649 = preparar_payload(payload_649, temp_motor, SIG_COOLANT) 
-                                # La ECU no provee Oil y Fuel, enviamos 0 (o temperatura ambiente) para no enviar basura
-                                payload_649 = preparar_payload(payload_649, 33, SIG_OIL) 
-                                payload_649 = preparar_payload(payload_649, 100, SIG_FUEL) 
+                                payload_649 = preparar_payload(payload_649, 0, SIG_OIL) 
+                                payload_649 = preparar_payload(payload_649, 0, SIG_FUEL) # Al enviar 0 lo que se esta enviando es el 0x28 por el escalamiento
                                 bus.send(can.Message(arbitration_id=ID_TEMP, data=payload_649, is_extended_id=False))
 
-                                # Control de impresión en consola para no saturar la CPU
+                                # Impresion de los datos recibidos de la ECU
                                 contador_display += 1
                                 if contador_display >= 5:
                                     hora_str = timestamp_read.strftime('%H:%M:%S.%f')[:-3]
