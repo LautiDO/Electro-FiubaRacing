@@ -103,6 +103,16 @@ const float FACTOR_CONVERSION = 0.6f;
 
 
 //====================================================
+//                      IMU
+//====================================================
+
+int pin_presion1 = PA1;
+int pin_presion2 = PA2;
+
+
+
+
+//====================================================
 //                      SETUP
 //====================================================
 void setup() {
@@ -154,9 +164,15 @@ void loop() {
   float dx5 = 4;
 
   int cambio = leer_cambio(pin_cambios);
-  
+  //--- PRESION ------------------------------------------
 
-  //--- IMU ------------------------------------------
+  float presion1 = leer_presion(pin_presion1);
+  float presion2 = leer_presion(pin_presion2);
+
+
+
+
+//--- IMU ------------------------------------------
   float acel_lateral_g = 0.0f;
   if (imu_online) {
     if (imuResponde()) {
@@ -203,11 +219,17 @@ void loop() {
   bufferEscritura = 1 - bufferActivo;
 
   //--- Debug serial ---------------------------------
+  /*
   Serial.print(imu_online ? "[IMU OK] " : "[IMU --] ");
   Serial.print("acel="); Serial.print(acel_lateral_g, 3);
   Serial.print(" g  ang="); Serial.print(angulo, 2);
   Serial.print("°  dx1="); Serial.println(dx1, 1);
- // Serial.print("°  cambio=");Serial.print(cambio);
+ Serial.print("°  ="); Serial.println(dx1, 1);
+ */
+ //Serial.print("°  cambio=");Serial.print(cambio);
+  Serial.print("presion1="); Serial.println(presion1);
+  //Serial.print("presion2="); Serial.println(presion2, 1);
+  delay(500);
 }
 
 
@@ -375,3 +397,10 @@ int leer_cambio(int pin_cambios) {
   }
     
 }
+
+float leer_presion(int pin_presion){
+  float presion = analogRead(PA1);
+  return presion;
+  
+  
+  }
