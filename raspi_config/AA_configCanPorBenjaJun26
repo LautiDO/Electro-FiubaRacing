@@ -1,0 +1,16 @@
+Primero hay que verificar que en la rapberry este en boot/firmware/config.txt que esten las lineas
+en las que configuramos la frecuencia del oscilador y definimos el pin int de la raspberry a 25 gpio que es el 22 de la raspy
+dtparam=spi=on
+dtoverlay=mcp2515-can0,oscilator=16000000,interrupt=25
+dtoverlay=spi-bcm2835-overlay
+luego hay que utilizar el can :
+sudo ip link set can0 up type can bitrate 1000000 loopback off
+
+
+Comandos utiles:
+para bajar el can:
+sudo ip link set can0 down
+
+para chequear si el can esta up:
+ip link show
+
