@@ -1,0 +1,13 @@
+Para ver el estado del servicio
+	sudo systemctl status setup_raspi.service
+	Resultado esperado: debería estar enable en verde
+
+Para ver errores y que generó tu script
+	sudo journalctl -u setup_raspi.service -n 50
+
+Para ver en tiempo real lo que produce el código
+	sudo journalctl -u setup_raspi.service -f
+
+
+En cado de haber error reiniciar el servicio manualmente
+	sudo systemctl restart setup_raspi.service
