@@ -34,8 +34,8 @@ volatile int i_dato = 0;
 #define NUM_CONFIRMACIONES 6
 
 int t1      = 3420;   // Primera
-int t2      = 3070;   // Segunda
-int t3      = 2090;   // Tercera
+int t2      = 3020;   // Segunda
+int t3      = 1940;   // Tercera
 int t4      = 3959;   // Cuarta
 int t5      = 3860;   // Quinta
 int t6      = 3700;   // Sexta
@@ -156,6 +156,7 @@ int clasificar_lectura(int valor) {
 
 int leer_cambio_confirmado(int valor_adc) {
   int lectura = clasificar_lectura(valor_adc);
+  Serial.println(valor_adc);
 
   if (lectura == -1) {
     // en tránsito: se resetea el conteo, no se confirma nada
