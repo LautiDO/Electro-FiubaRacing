@@ -19,7 +19,8 @@ from datetime import datetime
 # CONFIGURACIÓN — editá acá para cambiar puertos, IDs, timings
 # =============================================================
 
-FSYNC_CADA_N_MUESTRAS = 100
+FSYNC_CADA_N_MUESTRAS = 1000
+CONSOLA_CADA_N_CICLOS = 10 #cada cuanto muestra en consola 
 
 # --- SPI (STM32) ---
 SPI_BUS        = 1
@@ -414,7 +415,7 @@ def hilo_can_pantalla(_, stop):
         except can.CanError as e:
             # Error "normal" del bus (ENOBUFS, arbitration lost, etc): no matamos el hilo.
             print(f"[CAN-TX] {ROJO}Error de bus (se sigue intentando): {e}{RESET}")
-            time.sleep(0.05)
+            #time.sleep(0.05)
 
         except Exception as e:
             # Cualquier otra cosa (ej: OSError si la interfaz cayó, "Network is down"):
@@ -617,7 +618,8 @@ def main():
             if n_muestras % FSYNC_CADA_N_MUESTRAS == 0:
                 _fsync_solicitado.set()  # el hilo_fsync lo hace en background
 
-            mostrar_consola(stm, ecu, gps, t_ms, n_muestras, n_errores, n_resync)
+            if n_muestras % CONSOLA_CADA_N_CICLOS == 0:
+                mostrar_consola(stm, ecu, gps, t_ms, n_muestras, n_errores, n_resync)
 
             t_espera = CICLO_STM32_S - (time.monotonic() - t_ciclo)
             if t_espera > 0:
