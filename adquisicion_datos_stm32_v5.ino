@@ -45,11 +45,11 @@ volatile int i_dato = 0;
 //====================================================
 
 #define TOLERANCIA 70
-#define NUM_CONFIRMACIONES 6   
+#define NUM_CONFIRMACIONES 1   
 
 int t1      = 3420;   // Primera
-int t2      = 3070;   // Segunda
-int t3      = 2090;   // Tercera
+int t2      = 2980;   // Segunda
+int t3      = 1976;   // Tercera
 int t4      = 3959;   // Cuarta
 int t5      = 3860;   // Quinta
 int t6      = 3700;   // Sexta
