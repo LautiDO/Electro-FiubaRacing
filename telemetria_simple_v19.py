@@ -6,6 +6,7 @@ Fuentes:
   STM32 → SPI     (marcha, ángulo, acel_lateral, accel xyz, giro xyz, dx1..dx3, presiones STM)
   ECU   → Serial  (RPM, TPS, AFR, temperaturas, batería) — hilo propio, sticky
   GPS   → CAN RX  (latitud, longitud, velocidad)
+  Neumáticos → CAN RX (temperatura, 4 ruedas: 0x3F0 DI, 0x3F4 DD, 0x3F8 TI, 0x3FC TD)
 Salidas:
   CAN TX    → hilo propio, 10 Hz, manda el último estado sticky a la pantalla del cockpit
   CSV       → hilo propio con cola, no bloquea nada
@@ -74,6 +75,11 @@ CAN_ID_GPS_LATLON  = 0x680
 CAN_ID_GPS_TIEMPO  = 0x681
 CAN_ID_GPS_FECHA   = 0x682
 
+CAN_ID_NEUMATICO_DI = 0x3F0  # Delantera izquierda
+CAN_ID_NEUMATICO_DD = 0x3F4  # Delantera derecha
+CAN_ID_NEUMATICO_TI = 0x3F8  # Trasera izquierda
+CAN_ID_NEUMATICO_TD = 0x3FC  # Trasera derecha
+
 SIG_RPM         = {'off': 0, 'len': 2, 'mask': 0xFFFF, 'mult': 1,    'div': 1,    'add': 0}
 SIG_TPS         = {'off': 6, 'len': 2, 'mask': 0xFFFF, 'mult': 1,    'div': 10,   'add': 0}
 SIG_PRES_ACEITE = {'off': 6, 'len': 2, 'mask': 0xFFFF, 'mult': 1000, 'div': 1,    'add': 0}
@@ -110,6 +116,7 @@ CSV_COLUMNAS = [
     "temp_refrigerante", "temp_aire",
     "presion_aceite", "bateria_v",
     "gps_lat", "gps_lon", "gps_vel_kmh",
+    "temp_neumatico_di", "temp_neumatico_dd", "temp_neumatico_ti", "temp_neumatico_td",
 ]
 
 STM_CAMPOS = ["marcha", "angulo", "acel_lateral", "acel_x", "acel_y", "acel_z",
@@ -118,6 +125,7 @@ STM_CAMPOS = ["marcha", "angulo", "acel_lateral", "acel_x", "acel_y", "acel_z",
 ECU_CAMPOS = ["rpm", "tps", "afr", "temp_refrigerante", "temp_aire",
               "presion_aceite", "bateria_v"]
 GPS_CAMPOS = ["gps_lat", "gps_lon", "gps_vel_kmh"]
+NEUMATICO_CAMPOS = ["temp_neumatico_di", "temp_neumatico_dd", "temp_neumatico_ti", "temp_neumatico_td"]
 
 NOMBRES_MARCHA = {0: "N", 1: "1ª", 2: "2ª", 3: "3ª", 4: "4ª", 5: "5ª", 6: "6ª"}
 
@@ -125,6 +133,7 @@ NOMBRES_MARCHA = {0: "N", 1: "1ª", 2: "2ª", 3: "3ª", 4: "4ª", 5: "5ª", 6: "
 RESET    = "\033[0m"
 BOLD     = "\033[1m"
 CYAN     = "\033[36m"
+AZUL     = "\033[34m"
 VERDE    = "\033[32m"
 AMARILLO = "\033[33m"
 ROJO     = "\033[31m"
@@ -136,6 +145,20 @@ def _fmt(val, decimales=2):
     if val is None:
         return f"{GRIS}---{RESET}"
     return f"{val:.{decimales}f}"
+
+def _fmt_neumatico(temp, decimales=1):
+    """Temperatura de neumático con color según rango (azul frío, verde ok, amarillo caliente, rojo crítico)."""
+    if temp is None:
+        return f"{GRIS}---{RESET}"
+    if temp < 30:
+        color = AZUL
+    elif temp < 75:
+        color = VERDE
+    elif temp < 90:
+        color = AMARILLO
+    else:
+        color = ROJO
+    return f"{color}{temp:.{decimales}f}{RESET}"
 
 # =============================================================
 # ESTADO COMPARTIDO
@@ -151,6 +174,17 @@ def guardar_gps(datos):
 def leer_gps():
     with _lock_gps:
         return dict(_estado_gps)
+
+_lock_neumaticos = threading.Lock()
+_estado_neumaticos = {k: 0.0 for k in NEUMATICO_CAMPOS}   # sin dato del sensor → 0
+
+def guardar_neumaticos(datos):
+    with _lock_neumaticos:
+        _estado_neumaticos.update(datos)
+
+def leer_neumaticos():
+    with _lock_neumaticos:
+        return dict(_estado_neumaticos)
 
 _lock_ecu = threading.Lock()
 _estado_ecu = {
@@ -482,13 +516,26 @@ def _decodificar_gps_tiempo(data):
     velocidad_raw = struct.unpack_from('>H', data, 4)[0]
     return {"gps_vel_kmh": velocidad_raw * 0.1}
 
-GPS_DECODIFICADORES = {
-    CAN_ID_GPS_LATLON: _decodificar_gps_latlon,
-    CAN_ID_GPS_TIEMPO: _decodificar_gps_tiempo,
+def _decodificador_neumatico(campo):
+    """Fábrica: las 4 ruedas usan el mismo payload (2 bytes big-endian, escala 0.1 °C);
+    solo cambia el campo donde se guarda. unpack_from lanza struct.error si el frame es corto."""
+    def decode(data):
+        raw = struct.unpack_from('>H', data, 0)[0]
+        return {campo: raw / 10.0}
+    return decode
+
+# Cada CAN ID mapea a (función decodificadora, función que guarda el resultado)
+CAN_RX_HANDLERS = {
+    CAN_ID_GPS_LATLON:   (_decodificar_gps_latlon, guardar_gps),
+    CAN_ID_GPS_TIEMPO:   (_decodificar_gps_tiempo, guardar_gps),
+    CAN_ID_NEUMATICO_DI: (_decodificador_neumatico("temp_neumatico_di"), guardar_neumaticos),
+    CAN_ID_NEUMATICO_DD: (_decodificador_neumatico("temp_neumatico_dd"), guardar_neumaticos),
+    CAN_ID_NEUMATICO_TI: (_decodificador_neumatico("temp_neumatico_ti"), guardar_neumaticos),
+    CAN_ID_NEUMATICO_TD: (_decodificador_neumatico("temp_neumatico_td"), guardar_neumaticos),
 }
 
-def hilo_gps(bus_can, stop):
-    print("[GPS] Escuchando mensajes GPS desde CAN...")
+def hilo_can_rx(bus_can, stop):
+    print("[CAN RX] Escuchando GPS y neumáticos (4 ruedas)...")
     while not stop.is_set():
         try:
             msg = bus_can.recv(timeout=0.1)
@@ -497,14 +544,15 @@ def hilo_gps(bus_can, stop):
             continue
         if msg is None:
             continue
-        decoder = GPS_DECODIFICADORES.get(msg.arbitration_id)
-        if decoder:
+        handler = CAN_RX_HANDLERS.get(msg.arbitration_id)
+        if handler:
+            decoder, guardar = handler
             try:
-                guardar_gps(decoder(bytes(msg.data)))
+                guardar(decoder(bytes(msg.data)))
             except struct.error:
                 # Frame con menos bytes de los esperados: se descarta y el hilo sigue vivo
                 continue
-    print("[GPS] Hilo detenido.")
+    print("[CAN RX] Hilo detenido.")
 
 # =============================================================
 # CAN TX (Pantalla Cockpit)
@@ -628,6 +676,11 @@ def mostrar_consola(estado):
     print(f"  {'Longitud':<22}  {_fmt(estado.get('gps_lon'), 7)}  °")
     print(f"  {'Velocidad':<22}  {_fmt(estado.get('gps_vel_kmh'))}  km/h")
 
+    print(f"  {'Neumático DI':<22}  {_fmt_neumatico(estado.get('temp_neumatico_di'))}  °C")
+    print(f"  {'Neumático DD':<22}  {_fmt_neumatico(estado.get('temp_neumatico_dd'))}  °C")
+    print(f"  {'Neumático TI':<22}  {_fmt_neumatico(estado.get('temp_neumatico_ti'))}  °C")
+    print(f"  {'Neumático TD':<22}  {_fmt_neumatico(estado.get('temp_neumatico_td'))}  °C")
+
     print(f"\n  Lecturas SPI fallidas: {c_err}{n_fail} ({tasa_err:.1f}%){RESET}")
     print(f"  CSV perdidos (cola llena): {n_perd}")
     print(f"\n  {GRIS}CSV → {CSV_NOMBRE}{RESET}")
@@ -668,13 +721,13 @@ def main():
 
     # 3. Iniciar Hilos
     t_ecu = threading.Thread(target=hilo_ecu, args=(stop,), daemon=True)
-    t_gps = threading.Thread(target=hilo_gps, args=(bus_can, stop), daemon=True)
+    t_can_rx = threading.Thread(target=hilo_can_rx, args=(bus_can, stop), daemon=True)
     t_can_tx = threading.Thread(target=hilo_can_tx, args=(bus_can, stop), daemon=True)
     t_csv = threading.Thread(target=hilo_csv, args=(cola_csv, stop), daemon=False)
     t_display = threading.Thread(target=hilo_consola, args=(stop,), daemon=True) if MOSTRAR_CONSOLA else None
 
     t_ecu.start()
-    t_gps.start()
+    t_can_rx.start()
     t_can_tx.start()
     t_csv.start()
     if t_display is not None:
@@ -702,6 +755,7 @@ def main():
             stm_actual = leer_stm_sticky()
             ecu_actual = leer_ecu_sticky()
             gps_actual = leer_gps()
+            neumaticos_actual = leer_neumaticos()
 
             tiempo_ms = int((time.perf_counter() - t_inicio_pc) * 1000)
 
@@ -709,6 +763,7 @@ def main():
             fila.update(stm_actual)
             fila.update(ecu_actual)
             fila.update(gps_actual)
+            fila.update(neumaticos_actual)
 
             try:
                 cola_csv.put_nowait(fila)
