@@ -499,7 +499,11 @@ def hilo_gps(bus_can, stop):
             continue
         decoder = GPS_DECODIFICADORES.get(msg.arbitration_id)
         if decoder:
-            guardar_gps(decoder(bytes(msg.data)))
+            try:
+                guardar_gps(decoder(bytes(msg.data)))
+            except struct.error:
+                # Frame con menos bytes de los esperados: se descarta y el hilo sigue vivo
+                continue
     print("[GPS] Hilo detenido.")
 
 # =============================================================
